@@ -72,30 +72,30 @@ const websiteAnalysisTool: Tool = {
       },
       waitFor: {
         type: 'number',
-        description: 'Time to wait in milliseconds before taking screenshot (default: 3000)',
-        default: 3000,
+        description: 'Time to wait in milliseconds before taking screenshot (default: 10000)',
+        default: 10000,
       },
       viewportWidth: {
         type: 'number',
-        description: 'Viewport width for screenshot (default: 1280)',
-        default: 1280,
+        description: 'Viewport width for screenshot (default: 1920)',
+        default: 1920,
       },
       viewportHeight: {
         type: 'number',
-        description: 'Viewport height for screenshot (default: 720)',
-        default: 720,
+        description: 'Viewport height for screenshot (default: 1080)',
+        default: 1080,
       },
       fullPage: {
         type: 'boolean',
-        description: 'Take full page screenshot (default: false)',
-        default: false,
+        description: 'Take full page screenshot (default: true)',
+        default: true,
       },
     },
     required: ['question', 'url'],
   },
 };
 
-// Helper function to take website screenshot
+// Helper function to take website screenshot using existing Chrome instance
 async function takeWebsiteScreenshot(
   url: string,
   options: {
@@ -106,34 +106,32 @@ async function takeWebsiteScreenshot(
   } = {}
 ): Promise<Buffer> {
   const {
-    waitFor = 3000,
-    viewportWidth = 1280,
-    viewportHeight = 720,
-    fullPage = false,
+    waitFor = 10000, // Changed default to 10 seconds
+    viewportWidth = 1920, // Changed to common fullscreen width
+    viewportHeight = 1080, // Changed to common fullscreen height
+    fullPage = true // Changed default to true for full page screenshots
   } = options;
 
   console.error(`Taking screenshot of: ${url}`);
   
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-accelerated-2d-canvas',
-      '--no-first-run',
-      '--no-zygote',
-      '--disable-gpu',
-    ],
+  const browser = await puppeteer.connect({
+    browserURL: 'http://localhost:9222',
+    defaultViewport: null
   });
 
   try {
     const page = await browser.newPage();
     
-    // Set viewport
+    // Set viewport to fullscreen dimensions
     await page.setViewport({
       width: viewportWidth,
-      height: viewportHeight,
+      height: viewportHeight
+    });
+
+    // Maximize the window
+    await page.evaluate(() => {
+      window.moveTo(0, 0);
+      window.resizeTo(screen.width, screen.height);
     });
 
     // Set user agent to avoid bot detection
@@ -159,11 +157,20 @@ async function takeWebsiteScreenshot(
     });
 
     console.error(`Screenshot taken successfully: ${screenshot.length} bytes`);
+    
+    // Close the page but not the browser (since we're connected to existing instance)
+    await page.close();
+    
     return screenshot as Buffer;
+  } catch (error) {
+    console.error('Error taking screenshot:', error);
+    throw error;
   } finally {
-    await browser.close();
+    // Disconnect from browser instead of closing it
+    browser.disconnect();
   }
 }
+
 function getMimeType(filePath: string): string {
   const ext = extname(filePath).toLowerCase();
   switch (ext) {
@@ -180,6 +187,7 @@ function getMimeType(filePath: string): string {
       return 'image/jpeg'; // Default to JPEG
   }
 }
+
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [visualQAFileTool, websiteAnalysisTool],
