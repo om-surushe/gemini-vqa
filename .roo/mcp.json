@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "gemini-vqa": {
+      "command": "node",
+      "args": [
+        "/home/om-surushe/Documents/gemini-vqa-mcp/dist/index.js"
+      ],
+      "env": {
+        "GEMINI_API_KEY": "AIzaSyAKM4BQCkSuO95ZbXIuEeGWCUJGV7q5f18"
+      },
+      "alwaysAllow": [
+        "visual_qa"
+      ]
+    }
+  }
+}
