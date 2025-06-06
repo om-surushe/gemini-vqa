@@ -8,6 +8,8 @@ import {
   Tool,
 } from '@modelcontextprotocol/sdk/types.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { readFileSync, existsSync } from 'fs';
+import { extname } from 'path';
 
 // Get API key from environment
 const API_KEY = process.env.GEMINI_API_KEY;
@@ -44,16 +46,32 @@ const visualQATool: Tool = {
         type: 'string',
         description: 'The question to ask about the image',
       },
-      image: {
+      imagePath: {
         type: 'string',
-        description: 'Base64 encoded image data (without data URL prefix)',
+        description: 'Path to the image file (supports JPEG, PNG, GIF, WebP)',
       },
     },
-    required: ['question', 'image'],
+    required: ['question', 'imagePath'],
   },
 };
 
-// Handle list tools request
+// Helper function to get MIME type from file extension
+function getMimeType(filePath: string): string {
+  const ext = extname(filePath).toLowerCase();
+  switch (ext) {
+    case '.jpg':
+    case '.jpeg':
+      return 'image/jpeg';
+    case '.png':
+      return 'image/png';
+    case '.gif':
+      return 'image/gif';
+    case '.webp':
+      return 'image/webp';
+    default:
+      return 'image/jpeg'; // Default to JPEG
+  }
+}
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [visualQATool],
@@ -66,29 +84,43 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   if (name === 'visual_qa') {
     try {
-      const { question, image } = args as { question: string; image: string };
+      const { question, imagePath } = args as { question: string; imagePath: string };
 
       // Validate inputs
       if (!question || typeof question !== 'string') {
         throw new Error('Question is required and must be a string');
       }
 
-      if (!image || typeof image !== 'string') {
-        throw new Error('Image is required and must be a base64 string');
+      if (!imagePath || typeof imagePath !== 'string') {
+        throw new Error('Image path is required and must be a string');
       }
 
-      // Validate base64 format
-      if (!/^[A-Za-z0-9+/]*={0,2}$/.test(image)) {
-        throw new Error('Invalid base64 format');
+      // Check if file exists
+      if (!existsSync(imagePath)) {
+        throw new Error(`Image file not found: ${imagePath}`);
       }
 
-      console.error(`Processing visual QA request: ${question.substring(0, 50)}...`);
+      console.error(`Processing visual QA request for: ${imagePath}`);
+      console.error(`Question: ${question.substring(0, 50)}...`);
+
+      // Read image file and convert to base64
+      let imageBuffer: Buffer;
+      try {
+        imageBuffer = readFileSync(imagePath);
+      } catch (fileError) {
+        throw new Error(`Failed to read image file: ${fileError instanceof Error ? fileError.message : 'Unknown file error'}`);
+      }
+
+      const base64Image = imageBuffer.toString('base64');
+      const mimeType = getMimeType(imagePath);
+
+      console.error(`Image loaded: ${imageBuffer.length} bytes, MIME type: ${mimeType}`);
 
       // Prepare image data for Gemini
       const imagePart = {
         inlineData: {
-          data: image,
-          mimeType: 'image/jpeg', // Assume JPEG for simplicity
+          data: base64Image,
+          mimeType: mimeType,
         },
       };
 
